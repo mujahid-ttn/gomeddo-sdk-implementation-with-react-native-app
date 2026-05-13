@@ -24,6 +24,8 @@ const ENV_OPTIONS: { label: string; value: Environment }[] = [
   { label: 'Develop', value: Environment.DEVELOP },
 ];
 
+type ResourceRow = { id: string; name: string };
+
 export default function App() {
   const [apiKey, setApiKey] = useState('');
   const [environment, setEnvironment] = useState(Environment.PRODUCTION);
@@ -32,6 +34,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   /** First resource id from last successful resources call — used for time slots demo */
   const [resourceIdForSlots, setResourceIdForSlots] = useState<string | null>(null);
+  /** Populated after “Fetch resources” — sorted by name */
+  const [resourceRows, setResourceRows] = useState<ResourceRow[]>([]);
 
   const requireClient = useCallback(() => {
     const trimmed = apiKey.trim();
@@ -45,6 +49,7 @@ export default function App() {
   const runFetchResources = useCallback(async () => {
     setError(null);
     setResult(null);
+    setResourceRows([]);
     const client = requireClient();
     if (!client) return;
     setLoading(true);
@@ -52,12 +57,20 @@ export default function App() {
       const resourceResult = await client.buildResourceRequest().getResults();
       const count = resourceResult.numberOfresources();
       const ids = resourceResult.getResourceIds();
+      const rows: ResourceRow[] = ids
+        .map((id) => {
+          const r = resourceResult.getResource(id);
+          return { id, name: r?.name?.trim() ? r.name : id };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      setResourceRows(rows);
       const firstId = ids[0] ?? null;
       setResourceIdForSlots(firstId);
       setResult(
         `Resources: ${count} returned. First resource id (for time slots): ${firstId ?? 'none'}. (@gomeddo/sdk ${GoMeddo.version})`,
       );
     } catch (e: unknown) {
+      setResourceRows([]);
       setError(formatError(e));
     } finally {
       setLoading(false);
@@ -190,6 +203,18 @@ export default function App() {
 
         {result ? <Text style={styles.success}>{result}</Text> : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        {resourceRows.length > 0 ? (
+          <View style={styles.listSection}>
+            <Text style={styles.listTitle}>All resources ({resourceRows.length})</Text>
+            {resourceRows.map((row) => (
+              <View key={row.id} style={styles.listRow}>
+                <Text style={styles.listName}>{row.name}</Text>
+                <Text style={styles.listId}>{row.id}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -311,5 +336,37 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#b00020',
     lineHeight: 22,
+  },
+  listSection: {
+    marginTop: 20,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#ccc',
+  },
+  listTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111',
+    marginBottom: 10,
+  },
+  listRow: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e0e0e0',
+  },
+  listName: {
+    fontSize: 15,
+    color: '#111',
+    fontWeight: '500',
+  },
+  listId: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+    fontFamily: 'Menlo',
   },
 });
