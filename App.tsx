@@ -17,6 +17,16 @@ function formatError(e: unknown): string {
   return 'Request failed';
 }
 
+function parseSfDate(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'string') {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
 const ENV_OPTIONS: { label: string; value: Environment }[] = [
   { label: 'Production', value: Environment.PRODUCTION },
   { label: 'Staging', value: Environment.STAGING },
@@ -25,6 +35,8 @@ const ENV_OPTIONS: { label: string; value: Environment }[] = [
 ];
 
 type ResourceRow = { id: string; name: string };
+
+type ReservationRow = { id: string; name: string; detail: string };
 
 export default function App() {
   const [apiKey, setApiKey] = useState('');
@@ -36,6 +48,8 @@ export default function App() {
   const [resourceIdForSlots, setResourceIdForSlots] = useState<string | null>(null);
   /** Populated after “Fetch resources” — sorted by name */
   const [resourceRows, setResourceRows] = useState<ResourceRow[]>([]);
+  /** Populated after “Fetch reservations” — sorted by name */
+  const [reservationRows, setReservationRows] = useState<ReservationRow[]>([]);
 
   const requireClient = useCallback(() => {
     const trimmed = apiKey.trim();
@@ -50,6 +64,7 @@ export default function App() {
     setError(null);
     setResult(null);
     setResourceRows([]);
+    setReservationRows([]);
     const client = requireClient();
     if (!client) return;
     setLoading(true);
@@ -71,6 +86,7 @@ export default function App() {
       );
     } catch (e: unknown) {
       setResourceRows([]);
+      setReservationRows([]);
       setError(formatError(e));
     } finally {
       setLoading(false);
@@ -80,6 +96,7 @@ export default function App() {
   const runFetchReservations = useCallback(async () => {
     setError(null);
     setResult(null);
+    setReservationRows([]);
     const client = requireClient();
     if (!client) return;
     setLoading(true);
@@ -90,13 +107,36 @@ export default function App() {
         .buildReservationRequest()
         .withEndDatetimeAfter(rangeStart)
         .withStartDatetimeBefore(rangeEnd)
+        .includeAdditionalField('Name')
+        .includeAdditionalField('B25__Start__c')
+        .includeAdditionalField('B25__End__c')
         .getResults();
+        console.log("mujahid>>>reservationResult", reservationResult);
       const n = reservationResult.numberOfReservations();
-      const sampleIds = reservationResult.getReservationIds().slice(0, 5);
+      const ids = reservationResult.getReservationIds();
+      const rows: ReservationRow[] = ids
+        .map((id) => {
+          const res = reservationResult.getReservation(id);
+          const nameRaw = res?.getCustomProperty('Name');
+          const name =
+            typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim() : id;
+          const start =
+            res?.getStartDatetime() ?? parseSfDate(res?.getCustomProperty('B25__Start__c'));
+          const end =
+            res?.getEndDatetime() ?? parseSfDate(res?.getCustomProperty('B25__End__c'));
+          let detail = '';
+          if (start && end) {
+            detail = `${start.toISOString().slice(0, 16)} → ${end.toISOString().slice(0, 16)} UTC`;
+          }
+          return { id, name, detail };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      setReservationRows(rows);
       setResult(
-        `Reservations (UTC window ~7d past → 90d future): ${n} matches. Sample ids: ${sampleIds.join(', ') || 'none'}.`,
+        `Reservations (UTC window ~7d past → 90d future): ${n} returned. (@gomeddo/sdk ${GoMeddo.version})`,
       );
     } catch (e: unknown) {
+      setReservationRows([]);
       setError(formatError(e));
     } finally {
       setLoading(false);
@@ -210,6 +250,19 @@ export default function App() {
             {resourceRows.map((row) => (
               <View key={row.id} style={styles.listRow}>
                 <Text style={styles.listName}>{row.name}</Text>
+                <Text style={styles.listId}>{row.id}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {reservationRows.length > 0 ? (
+          <View style={styles.listSection}>
+            <Text style={styles.listTitle}>All reservations ({reservationRows.length})</Text>
+            {reservationRows.map((row) => (
+              <View key={row.id} style={styles.listRow}>
+                <Text style={styles.listName}>{row.name}</Text>
+                {row.detail ? <Text style={styles.listDetail}>{row.detail}</Text> : null}
                 <Text style={styles.listId}>{row.id}</Text>
               </View>
             ))}
@@ -362,6 +415,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#111',
     fontWeight: '500',
+  },
+  listDetail: {
+    fontSize: 13,
+    color: '#444',
+    marginTop: 4,
   },
   listId: {
     fontSize: 12,
