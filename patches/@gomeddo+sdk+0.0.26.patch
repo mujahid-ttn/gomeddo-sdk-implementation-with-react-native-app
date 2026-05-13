@@ -1,0 +1,66 @@
+diff --git a/node_modules/@gomeddo/sdk/dist/cjs/api/gomeddo-api-requests.js b/node_modules/@gomeddo/sdk/dist/cjs/api/gomeddo-api-requests.js
+index 1eb7f43..bb177de 100644
+--- a/node_modules/@gomeddo/sdk/dist/cjs/api/gomeddo-api-requests.js
++++ b/node_modules/@gomeddo/sdk/dist/cjs/api/gomeddo-api-requests.js
+@@ -299,7 +299,9 @@ class GoMeddoAPI {
+     }
+     getHeaders() {
+         return {
+-            Authorization: `Bearer ${this.apiKey}`
++            Authorization: `Bearer ${this.apiKey}`,
++            'Content-Type': 'application/json',
++            Accept: 'application/json',
+         };
+     }
+     addFieldsToUrl(url, fields) {
+@@ -310,7 +312,16 @@ class GoMeddoAPI {
+             if (response.ok) {
+                 return;
+             }
+-            throw new RequestError((yield response.json()));
++            const text = yield response.text();
++            let parsed;
++            try {
++                parsed = JSON.parse(text);
++            }
++            catch (_parseErr) {
++                const preview = text.trim().slice(0, 220).replace(/\s+/g, ' ');
++                throw new Error(`HTTP ${response.status} ${response.statusText}: expected JSON error from API but got non-JSON (often HTML). Check API key, Environment (org vs Production URL), and network. Preview: ${preview}`);
++            }
++            throw new RequestError(parsed);
+         });
+     }
+ }
+diff --git a/node_modules/@gomeddo/sdk/dist/esm/api/gomeddo-api-requests.js b/node_modules/@gomeddo/sdk/dist/esm/api/gomeddo-api-requests.js
+index c3e45b8..e21c41f 100644
+--- a/node_modules/@gomeddo/sdk/dist/esm/api/gomeddo-api-requests.js
++++ b/node_modules/@gomeddo/sdk/dist/esm/api/gomeddo-api-requests.js
+@@ -248,7 +248,9 @@ export default class GoMeddoAPI {
+     }
+     getHeaders() {
+         return {
+-            Authorization: `Bearer ${this.apiKey}`
++            Authorization: `Bearer ${this.apiKey}`,
++            'Content-Type': 'application/json',
++            Accept: 'application/json',
+         };
+     }
+     addFieldsToUrl(url, fields) {
+@@ -258,7 +260,16 @@ export default class GoMeddoAPI {
+         if (response.ok) {
+             return;
+         }
+-        throw new RequestError((await response.json()));
++        const text = await response.text();
++        let parsed;
++        try {
++            parsed = JSON.parse(text);
++        }
++        catch (_parseErr) {
++            const preview = text.trim().slice(0, 220).replace(/\s+/g, ' ');
++            throw new Error(`HTTP ${response.status} ${response.statusText}: expected JSON error from API but got non-JSON (often HTML). Check API key, Environment (org vs Production URL), and network. Preview: ${preview}`);
++        }
++        throw new RequestError(parsed);
+     }
+ }
+ class GoMeddoApiError {
