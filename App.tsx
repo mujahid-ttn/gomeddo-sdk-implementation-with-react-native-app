@@ -32,6 +32,13 @@ function parseSfDate(value: unknown): Date | null {
   return null;
 }
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MS_PER_7_DAYS = 7 * MS_PER_DAY;
+const MS_PER_90_DAYS = 90 * MS_PER_DAY;
+
+const API_KEY_REQUIRED_MESSAGE =
+  "Enter an API key from welcome.gomeddo.com (see GoMeddo docs).";
+
 const ENV_OPTIONS: { label: string; value: Environment }[] = [
   { label: "Production", value: Environment.PRODUCTION },
   { label: "Staging", value: Environment.STAGING },
@@ -62,12 +69,9 @@ export default function App() {
   const [leadLastName, setLeadLastName] = useState("Mujahid");
   const [leadEmail, setLeadEmail] = useState("mujahid.mohammad@gmail.com");
 
-  const requireClient = useCallback(() => {
+  const createClient = useCallback((): GoMeddo | null => {
     const trimmed = apiKey.trim();
-    if (!trimmed) {
-      setError("Enter an API key from welcome.gomeddo.com (see GoMeddo docs).");
-      return null;
-    }
+    if (!trimmed) return null;
     return new GoMeddo(trimmed, environment);
   }, [apiKey, environment]);
 
@@ -76,8 +80,11 @@ export default function App() {
     setResult(null);
     setResourceRows([]);
     setReservationRows([]);
-    const client = requireClient();
-    if (!client) return;
+    const client = createClient();
+    if (!client) {
+      setError(API_KEY_REQUIRED_MESSAGE);
+      return;
+    }
     setLoading(true);
     try {
       const resourceResult = await client.buildResourceRequest().getResults();
@@ -95,7 +102,7 @@ export default function App() {
       const firstId = ids[0] ?? null;
       setResourceIdForSlots(firstId);
       setResult(
-        `Resources: ${count} returned. First resource id (for time slots): ${firstId ?? "none"}.`,
+        `Resources: ${count} returned. First resource id (for time slots): ${firstId ?? "none"}. (@gomeddo/sdk ${GoMeddo.version})`,
       );
     } catch (e: unknown) {
       setResourceRows([]);
@@ -104,18 +111,21 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [requireClient]);
+  }, [createClient]);
 
   const runFetchReservations = useCallback(async () => {
     setError(null);
     setResult(null);
     setReservationRows([]);
-    const client = requireClient();
-    if (!client) return;
+    const client = createClient();
+    if (!client) {
+      setError(API_KEY_REQUIRED_MESSAGE);
+      return;
+    }
     setLoading(true);
     try {
-      const rangeStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const rangeEnd = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+      const rangeStart = new Date(Date.now() - MS_PER_7_DAYS);
+      const rangeEnd = new Date(Date.now() + MS_PER_90_DAYS);
       const reservationResult = await client
         .buildReservationRequest()
         .withEndDatetimeAfter(rangeStart)
@@ -157,13 +167,16 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [requireClient]);
+  }, [createClient]);
 
   const runFetchTimeSlots = useCallback(async () => {
     setError(null);
     setResult(null);
-    const client = requireClient();
-    if (!client) return;
+    const client = createClient();
+    if (!client) {
+      setError(API_KEY_REQUIRED_MESSAGE);
+      return;
+    }
     if (!resourceIdForSlots) {
       setError(
         "Run “Fetch resources” first so a resource id is available for time slots.",
@@ -174,7 +187,7 @@ export default function App() {
     try {
       const rangeStart = new Date();
       rangeStart.setUTCHours(0, 0, 0, 0);
-      const rangeEnd = new Date(rangeStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const rangeEnd = new Date(rangeStart.getTime() + MS_PER_7_DAYS);
       const slotsResult = await client
         .buildTimeSlotsRequest(rangeStart, rangeEnd)
         .withField("B25__Resource__c", resourceIdForSlots)
@@ -190,13 +203,16 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [requireClient, resourceIdForSlots]);
+  }, [createClient, resourceIdForSlots]);
 
   const runCreateDemoReservation = useCallback(async () => {
     setError(null);
     setResult(null);
-    const client = requireClient();
-    if (!client) return;
+    const client = createClient();
+    if (!client) {
+      setError(API_KEY_REQUIRED_MESSAGE);
+      return;
+    }
     if (!resourceIdForSlots) {
       setError(
         "Run “1 · Fetch resources” first so a resource id is selected for booking.",
@@ -215,7 +231,7 @@ export default function App() {
       const slotDayStart = new Date();
       slotDayStart.setUTCDate(slotDayStart.getUTCDate() + 1);
       slotDayStart.setUTCHours(0, 0, 0, 0);
-      const slotDayEnd = new Date(slotDayStart.getTime() + 24 * 60 * 60 * 1000);
+      const slotDayEnd = new Date(slotDayStart.getTime() + MS_PER_DAY);
 
       const resourceResult = await client
         .buildResourceRequest()
@@ -262,13 +278,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [
-    requireClient,
-    resourceIdForSlots,
-    leadFirstName,
-    leadLastName,
-    leadEmail,
-  ]);
+  }, [createClient, resourceIdForSlots, leadFirstName, leadLastName, leadEmail]);
 
   return (
     <View style={styles.root}>
@@ -280,9 +290,9 @@ export default function App() {
       >
         <Text style={styles.title}>GoMeddo SDK · React Native POC</Text>
         <Text style={styles.body}>
-          The official package <Text style={styles.mono}>@gomeddo/sdk.</Text>{" "}
-          Install and wire it like any other npm dependency. Use an API key from
-          your widget setup per GoMeddo prerequisites.
+          The official package <Text style={styles.mono}>@gomeddo/sdk</Text>{" "}
+          installs like any other npm dependency. Use an API key from your widget
+          setup per GoMeddo prerequisites.
         </Text>
 
         <Text style={styles.label}>Environment</Text>
@@ -408,10 +418,7 @@ export default function App() {
               All resources ({resourceRows.length})
             </Text>
             {resourceRows.map((row) => (
-              <View key={row.id} style={styles.listRow}>
-                <Text style={styles.listName}>{row.name}</Text>
-                <Text style={styles.listId}>{row.id}</Text>
-              </View>
+              <ListCard key={row.id} name={row.name} id={row.id} />
             ))}
           </View>
         ) : null}
@@ -422,13 +429,12 @@ export default function App() {
               All reservations ({reservationRows.length})
             </Text>
             {reservationRows.map((row) => (
-              <View key={row.id} style={styles.listRow}>
-                <Text style={styles.listName}>{row.name}</Text>
-                {row.detail ? (
-                  <Text style={styles.listDetail}>{row.detail}</Text>
-                ) : null}
-                <Text style={styles.listId}>{row.id}</Text>
-              </View>
+              <ListCard
+                key={row.id}
+                name={row.name}
+                detail={row.detail}
+                id={row.id}
+              />
             ))}
           </View>
         ) : null}
@@ -523,23 +529,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 48,
   },
-  buttonSecondary: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: "#007aff",
-  },
-  buttonSecondaryText: {
-    color: "#007aff",
-    fontSize: 15,
-    fontWeight: "600",
-    textAlign: "center",
-    paddingHorizontal: 8,
-  },
   buttonSpacing: {
     marginTop: 10,
   },
@@ -604,3 +593,21 @@ const styles = StyleSheet.create({
     fontFamily: "Menlo",
   },
 });
+
+function ListCard({
+  name,
+  detail,
+  id,
+}: {
+  name: string;
+  detail?: string;
+  id: string;
+}) {
+  return (
+    <View style={styles.listRow}>
+      <Text style={styles.listName}>{name}</Text>
+      {detail ? <Text style={styles.listDetail}>{detail}</Text> : null}
+      <Text style={styles.listId}>{id}</Text>
+    </View>
+  );
+}
