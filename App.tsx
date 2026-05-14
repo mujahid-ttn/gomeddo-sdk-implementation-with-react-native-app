@@ -58,9 +58,9 @@ export default function App() {
   /** Populated after “Fetch reservations” — sorted by name */
   const [reservationRows, setReservationRows] = useState<ReservationRow[]>([]);
   /** Lead fields for demo reservation (see GoMeddo booking demo) */
-  const [leadFirstName, setLeadFirstName] = useState("POC");
-  const [leadLastName, setLeadLastName] = useState("User");
-  const [leadEmail, setLeadEmail] = useState("poc.user@example.com");
+  const [leadFirstName, setLeadFirstName] = useState("Mohammad");
+  const [leadLastName, setLeadLastName] = useState("Mujahid");
+  const [leadEmail, setLeadEmail] = useState("mujahid.mohammad@gmail.com");
 
   const requireClient = useCallback(() => {
     const trimmed = apiKey.trim();
@@ -95,7 +95,7 @@ export default function App() {
       const firstId = ids[0] ?? null;
       setResourceIdForSlots(firstId);
       setResult(
-        `Resources: ${count} returned. First resource id (for time slots): ${firstId ?? "none"}. (@gomeddo/sdk ${GoMeddo.version})`,
+        `Resources: ${count} returned. First resource id (for time slots): ${firstId ?? "none"}.`,
       );
     } catch (e: unknown) {
       setResourceRows([]);
@@ -280,10 +280,9 @@ export default function App() {
       >
         <Text style={styles.title}>GoMeddo SDK · React Native POC</Text>
         <Text style={styles.body}>
-          The official package <Text style={styles.mono}>@gomeddo/sdk</Text>{" "}
-          uses <Text style={styles.mono}>fetch</Text> only (no DOM). Install and
-          wire it like any other npm dependency. Use an API key from your widget
-          setup per GoMeddo prerequisites.
+          The official package <Text style={styles.mono}>@gomeddo/sdk.</Text>{" "}
+          Install and wire it like any other npm dependency. Use an API key from
+          your widget setup per GoMeddo prerequisites.
         </Text>
 
         <Text style={styles.label}>Environment</Text>
@@ -325,7 +324,7 @@ export default function App() {
           disabled={loading}
           style={[styles.button, loading && styles.buttonDisabled]}
         >
-          <Text style={styles.buttonText}>1 · Fetch resources</Text>
+          <Text style={styles.buttonText}>1 · Fetch Resources</Text>
         </Pressable>
 
         <Pressable
@@ -337,9 +336,7 @@ export default function App() {
             styles.buttonSpacing,
           ]}
         >
-          <Text style={styles.buttonText}>
-            2 · Fetch reservations (date window)
-          </Text>
+          <Text style={styles.buttonText}>2 · Fetch Reservations</Text>
         </Pressable>
 
         <Pressable
@@ -351,7 +348,7 @@ export default function App() {
             styles.buttonSpacing,
           ]}
         >
-          <Text style={styles.buttonText}>3 · Fetch time slots</Text>
+          <Text style={styles.buttonText}>3 · Fetch Time Slots</Text>
         </Pressable>
 
         <Text style={[styles.label, styles.sectionLabel]}>
@@ -397,9 +394,7 @@ export default function App() {
             styles.buttonSpacing,
           ]}
         >
-          <Text style={styles.buttonText}>
-            4 · Create reservation (first OPEN slot, tomorrow UTC)
-          </Text>
+          <Text style={styles.buttonText}>4 · Create Reservation</Text>
         </Pressable>
 
         {loading ? <ActivityIndicator style={styles.spinner} /> : null}
