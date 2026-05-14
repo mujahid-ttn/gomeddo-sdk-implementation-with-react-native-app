@@ -9,7 +9,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import GoMeddo, { Environment } from '@gomeddo/sdk';
+import GoMeddo, {
+  AvailabilitySlotType,
+  Environment,
+  Lead,
+  Reservation,
+} from '@gomeddo/sdk';
 
 function formatError(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -50,6 +55,10 @@ export default function App() {
   const [resourceRows, setResourceRows] = useState<ResourceRow[]>([]);
   /** Populated after “Fetch reservations” — sorted by name */
   const [reservationRows, setReservationRows] = useState<ReservationRow[]>([]);
+  /** Lead fields for demo reservation (see GoMeddo booking demo) */
+  const [leadFirstName, setLeadFirstName] = useState('POC');
+  const [leadLastName, setLeadLastName] = useState('User');
+  const [leadEmail, setLeadEmail] = useState('poc.user@example.com');
 
   const requireClient = useCallback(() => {
     const trimmed = apiKey.trim();
@@ -111,7 +120,6 @@ export default function App() {
         .includeAdditionalField('B25__Start__c')
         .includeAdditionalField('B25__End__c')
         .getResults();
-        console.log("mujahid>>>reservationResult", reservationResult);
       const n = reservationResult.numberOfReservations();
       const ids = reservationResult.getReservationIds();
       const rows: ReservationRow[] = ids
@@ -173,6 +181,76 @@ export default function App() {
       setLoading(false);
     }
   }, [requireClient, resourceIdForSlots]);
+
+  const runCreateDemoReservation = useCallback(async () => {
+    setError(null);
+    setResult(null);
+    const client = requireClient();
+    if (!client) return;
+    if (!resourceIdForSlots) {
+      setError('Run “1 · Fetch resources” first so a resource id is selected for booking.');
+      return;
+    }
+    const fn = leadFirstName.trim();
+    const ln = leadLastName.trim();
+    const em = leadEmail.trim();
+    if (!fn || !ln || !em) {
+      setError('Enter first name, last name, and email for the demo lead.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const slotDayStart = new Date();
+      slotDayStart.setUTCDate(slotDayStart.getUTCDate() + 1);
+      slotDayStart.setUTCHours(0, 0, 0, 0);
+      const slotDayEnd = new Date(slotDayStart.getTime() + 24 * 60 * 60 * 1000);
+
+      const resourceResult = await client
+        .buildResourceRequest()
+        .includeAllResourcesAt(resourceIdForSlots)
+        .withAvailableSlotsBetween(slotDayStart, slotDayEnd)
+        .getResults();
+
+      let targetResource = null;
+      let chosenSlot = null;
+      for (const rid of resourceResult.getResourceIds()) {
+        const res = resourceResult.getResource(rid);
+        if (!res) continue;
+        const slots = res.getTimeSlots();
+        const open = slots.find((s) => s.type === AvailabilitySlotType.OPEN);
+        if (open) {
+          targetResource = res;
+          chosenSlot = open;
+          break;
+        }
+      }
+      if (!targetResource || !chosenSlot) {
+        throw new Error(
+          'No OPEN slot found for tomorrow (UTC) on this resource tree. Try another resource in step 1 or another day in code.',
+        );
+      }
+
+      const reservation = new Reservation();
+      reservation.setResource(targetResource);
+      reservation.setStartDatetime(new Date(chosenSlot.startOfSlot));
+      reservation.setEndDatetime(new Date(chosenSlot.endOfSlot));
+      reservation.setLead(new Lead(fn, ln, em));
+
+      const saved = await client.saveReservation(reservation);
+      const savedName = saved.getCustomProperty('Name');
+      setResult(
+        `Reservation saved. Id: ${saved.id}${
+          savedName != null ? ` · Name: ${String(savedName)}` : ''
+        } · Resource: ${targetResource.name} · Slot (UTC): ${new Date(
+          chosenSlot.startOfSlot,
+        ).toISOString()} → ${new Date(chosenSlot.endOfSlot).toISOString()}`,
+      );
+    } catch (e: unknown) {
+      setError(formatError(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [requireClient, resourceIdForSlots, leadFirstName, leadLastName, leadEmail]);
 
   return (
     <View style={styles.root}>
@@ -236,6 +314,46 @@ export default function App() {
           style={[styles.buttonSecondary, loading && styles.buttonDisabled, styles.buttonSpacing]}>
           <Text style={styles.buttonSecondaryText}>
             3 · Fetch time slots (uses first resource from step 1)
+          </Text>
+        </Pressable>
+
+        <Text style={[styles.label, styles.sectionLabel]}>Demo lead (4 · save reservation)</Text>
+        <Text style={styles.hint}>
+          Matches the flow on the{' '}
+          <Text style={styles.mono}>GoMeddo-Booking-Demo</Text> page: availability for tomorrow
+          (UTC), first OPEN slot, then <Text style={styles.mono}>saveReservation</Text>. Creates a
+          real reservation in your org — use sandbox where possible.
+        </Text>
+        <TextInput
+          value={leadFirstName}
+          onChangeText={setLeadFirstName}
+          placeholder="First name"
+          autoCapitalize="words"
+          style={[styles.input, styles.inputTight]}
+        />
+        <TextInput
+          value={leadLastName}
+          onChangeText={setLeadLastName}
+          placeholder="Last name"
+          autoCapitalize="words"
+          style={[styles.input, styles.inputTight]}
+        />
+        <TextInput
+          value={leadEmail}
+          onChangeText={setLeadEmail}
+          placeholder="Email"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          style={styles.input}
+        />
+
+        <Pressable
+          onPress={runCreateDemoReservation}
+          disabled={loading}
+          style={[styles.buttonSecondary, loading && styles.buttonDisabled, styles.buttonSpacing]}>
+          <Text style={styles.buttonSecondaryText}>
+            4 · Create reservation (first OPEN slot, tomorrow UTC)
           </Text>
         </Pressable>
 
@@ -305,6 +423,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#555',
     marginBottom: 8,
+  },
+  sectionLabel: {
+    marginTop: 8,
+  },
+  hint: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#555',
+    marginBottom: 10,
+  },
+  inputTight: {
+    marginBottom: 10,
   },
   envRow: {
     flexDirection: 'row',
